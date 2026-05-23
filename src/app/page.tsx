@@ -54,6 +54,7 @@ const voiceSettings: Record<Mood, { rate: number; pitch: number }> = {
 
 export default function Home() {
   const [mood, setMood] = useState<Mood>('happy');
+  const [generatedMood, setGeneratedMood] = useState<Mood>('happy');
   const [lyrics, setLyrics] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -94,12 +95,23 @@ export default function Home() {
     [mood],
   );
 
-  const speakLyrics = (text = lyrics) => {
+  const displayedMood = useMemo(
+    () => moodOptions.find((option) => option.value === generatedMood) || moodOptions[0],
+    [generatedMood],
+  );
+
+  const handleMoodChange = (nextMood: Mood) => {
+    setMood(nextMood);
+    setLyrics('');
+    stopVoice();
+  };
+
+  const speakLyrics = (text = lyrics, useSelectedVoice = true) => {
     if (!speechSupported || !text.trim()) return;
 
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    const voice = voices.find((item) => item.name === selectedVoice);
+    const voice = useSelectedVoice ? voices.find((item) => item.name === selectedVoice) : undefined;
     const settings = voiceSettings[mood];
 
     if (voice) utterance.voice = voice;
@@ -109,7 +121,12 @@ export default function Home() {
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+      if (useSelectedVoice) {
+        window.setTimeout(() => speakLyrics(text, false), 80);
+      }
+    };
 
     window.speechSynthesis.speak(utterance);
   };
@@ -128,6 +145,7 @@ export default function Home() {
       const moodLyrics = lyricsTemplates[mood] || lyricsTemplates.happy;
       const selectedLyrics = moodLyrics[Math.floor(Math.random() * moodLyrics.length)];
       setLyrics(selectedLyrics);
+      setGeneratedMood(mood);
 
       const synth = new Tone.Synth().toDestination();
       await Tone.start();
@@ -177,7 +195,7 @@ export default function Home() {
             {moodOptions.map((option) => (
               <button
                 key={option.value}
-                onClick={() => setMood(option.value)}
+                onClick={() => handleMoodChange(option.value)}
                 className={`rounded-2xl border px-4 py-4 text-sm font-black transition ${
                   mood === option.value
                     ? `border-white/70 bg-gradient-to-br ${option.tone} text-slate-950 shadow-lg`
@@ -234,7 +252,7 @@ export default function Home() {
           <section className="rounded-3xl border border-white/15 bg-white/10 p-5 shadow-2xl backdrop-blur sm:p-8">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="text-2xl font-black text-yellow-200">
-                Lyrics for {selectedMood.label}
+                Lyrics for {displayedMood.label}
               </h2>
               <div className="flex flex-wrap gap-2">
                 <button
